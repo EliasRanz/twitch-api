@@ -1,0 +1,18 @@
+{
+  "name": "xxplosions/twitch-api",
+  "description": "An unofficial class to interact with the Twitch.tv API.",
+  "authors": [
+    {
+      "name": "Elias Ranz-Schleifer",
+      "email": "elias@xxplosions.com"
+    }
+  ],
+  "autoload": {
+    "psr-4": {
+      "TwitchTV\Twitch\\": "src/Twitch"
+    }
+  },
+  "require": {
+    "php": "^5.6|^7.0",
+  }
+}
