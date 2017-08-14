@@ -9,7 +9,7 @@
   ],
   "autoload": {
     "psr-4": {
-      "TwitchTV\Twitch\\": "src/Twitch"
+      "\TwitchTV\Twitch\\": "src/Twitch"
     }
   },
   "require": {
