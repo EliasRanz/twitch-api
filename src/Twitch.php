@@ -1,8 +1,8 @@
 <?php
 
-namespace TwitchTV;
+namespace Twitch;
 
-use TwitchTV\TwitchTV_Curl_Cache\TwitchTV_Curl_Cache;
+use Twitch\TwitchTV_Curl_Cache\TwitchTV_Curl_Cache;
 
 /**
  * Class Twitch
@@ -44,7 +44,6 @@ class Twitch {
      * @var string
      */
     private $_access_token;
-
     /**
      * Gets the user id of the stream.
      * @var
@@ -89,23 +88,16 @@ class Twitch {
      * @return string
      */
     public function authenticate() {
-        $i = 0;
         $return = "";
         $len = count($this->_scope_array);
-        $scope = "";
-
-        for($i = 0; $i < $len; $i++) {
-            if($len - 1 === 0) {
-                $scope .= "";
-                $return .= $scope;
-            } else {
-                $scope .= "+";
-                $return .= $scope;
+		for($i = 0; $i < $len; $i++) {
+			if($len - ($i + 1) === 0) {
+				$return .= $this->_scope_array[$i];
+			} else {
+                $return .= $this->_scope_array[$i] . "+";
             }
         }
-
-        $scope = $return;
-        return $this->_kraken_url . 'oauth2/authorize?response_type=code&client_id=' . $this->_client_id.'&redirect_uri=' . $this->_redirect_url . '&scope=' . $scope;
+        return $this->_kraken_url . 'oauth2/authorize?response_type=code&client_id=' . $this->_client_id.'&redirect_uri=' . $this->_redirect_url . '&scope=' . $return;
     }
 
     /**
@@ -122,29 +114,26 @@ class Twitch {
      * @param $code string      :This is the code that Twitch passes onto the $_redirect_url. This would often be pulled via a $_GET['code'] request.
      */
     public function set_access_token($code) {
-        $fields = array(
-            'client_id' => $this->_client_id,
-            'client_secret' => $this->_client_secret,
-            'grant_type' => 'authorization_code',
-            'redirect_uri' => $this->_redirect_url,
-            'code' => $code
-        );
-
-        $response = $this->run_curl($this->_kraken_url . "oauth/token", array(CURLOPT_FOLLOWLOCATION => FALSE,CURLOPT_RETURNTRANSFER => TRUE,CURLOPT_POST => 1,CURLOPT_POSTFIELDS => http_build_query($fields)));
-        $this->_access_token = $response["access_token"];
+        $response = $this->run_curl($this->_kraken_url."oauth2/token?client_id=" . $this->_client_id."&client_secret=".$this->_client_secret."&code=".$code."&grant_type=authorization_code&redirect_uri=".$this->_redirect_url,
+			array(CURLOPT_FOLLOWLOCATION => FALSE,CURLOPT_RETURNTRANSFER => TRUE,CURLOPT_POST => 1));
+        $this->_access_token = $response->access_token;
     }
 
     /**
      * Gets the authenticated users' username.
      */
     public function get_authenticated_user() {
-        $response = $this->run_curl($this->_kraken_url,array(CURLOPT_RETURNTRANSFER => 1,CURLOPT_HTTPHEADER => array('Authorization: OAuth ' . $this->get_access_token())));
+        $response = $this->run_curl($this->_kraken_url . "user",
+			array(CURLOPT_RETURNTRANSFER => 1));
 
-        if(isset($response['token']['error'])) {
-            die('Unauthorized');
+        if(isset($response->error)) {
+            die($response->error);
         } else {
-            $this->_username = $response['token']['user_name'];
+            $this->_username = $response->name;
+            $this->_user_id = $response->_id;
         }
+
+        return $this->_username;
     }
 
     /**
@@ -152,7 +141,8 @@ class Twitch {
      * @return bool:        true => valid Twitch channel, false => invalid Twitch channel
      */
     public function validate_stream() {
-            $response = $this->run_curl($this->_kraken_url . 'users/' . $this->get_userid() . '?client_id' . $this->_client_id . '&api_version=' . $this->_api_version, array(CURLOPT_RETURNTRANSFER => 1));
+            $response = $this->run_curl($this->_kraken_url . 'users/' . $this->get_userid() . '?client_id' . $this->_client_id . '&api_version=' . $this->_api_version,
+				array(CURLOPT_RETURNTRANSFER => 1));
             if (isset($response->error)) {
                 return false;
             } else {
@@ -160,17 +150,21 @@ class Twitch {
             }
     }
 
-    /**
-     * Sets the $_user_id property with the users' Twitch Id
-     */
-    private function set_userid() {
-        $response = $this->run_curl($this->_kraken_url . 'users?login=' . $this->get_authenticated_user() . '&client_id' . $this->_client_id . '&api_cversion=' . $this->_api_version, array(CURLOPT_RETURNTRANSFER => 1));
-        if (!empty($this->_username)) {
-            $return = json_decode($response, true);
-            $this->_user_id = $return['users'][0]['_id'];
-        } else {
-            die('Failed to get user_id');
-        }
+	/**
+	 * Sets a $_user_id for a given channel
+	 * @param mixed $channel
+	 * @return mixed
+	 */
+    public function set_userid($channel = null) {
+    	if(!isset($this->_user_id)) {
+			$response = $this->run_curl($this->_kraken_url . 'users?login=' . $channel, array(CURLOPT_RETURNTRANSFER => 1));
+			if (!empty($this->_username)) {
+				$return = json_decode($response, true);
+				$this->_user_id = $return['users'][0]->_id;
+			} else {
+				die('Failed to get user_id');
+			}
+		}
     }
 
     /**
@@ -185,6 +179,48 @@ class Twitch {
         }
     }
 
+	/**
+	 * Gets the channel data for a given stream, assumes that you have a twitch user id
+	 * @return array
+	 */
+	public function get_channel() {
+		$result = $this->run_curl($this->_kraken_url . 'channels/' . $this->_user_id, array(CURLOPT_RETURNTRANSFER => 1));
+
+		return array(
+			'id' => $result->_id,
+			'display_name' => $result->display_name,
+			'status' => $result->status,
+			'game' => $result->game,
+			'banner' => $result->video_banner,
+			'logo' => $result->logo,
+			'followers' => $result->followers,
+			'views' => $result->views
+		);
+	}
+
+	/**
+	 * Gets the subscribers for the authenticated stream, assumes that you have a twitch user id
+	 * @return array
+	 */
+	public function get_channel_subscribers() {
+		return $this->run_curl($this->_kraken_url . 'channels/' . $this->_user_id . '/subscriptions', array(CURLOPT_RETURNTRANSFER => 1));
+	}
+
+	public function get_stream_stats($id) {
+		$result = $this->run_curl($this->_kraken_url. 'streams/' . $id, array(CURLOPT_RETURNTRANSFER => 1));
+
+		if(isset($result->error) || $result->stream === null) {
+			return array('is_live' => false);
+		} else {
+			return array(
+				'viewers' => $result->stream->viewers,
+				'created_at' => $result->stream->created_at,
+				'followers' => $result->channel->followers,
+				'is_live' => true
+			);
+		}
+	}
+
     /**
      * Runs a curl command and returns a json response.
      * @param $url      :The url to make the curl request on
@@ -192,19 +228,32 @@ class Twitch {
      * @return mixed    :The json response
      */
     private function run_curl($url, $options) {
-        $ch = curl_init($url);
-        curl_setopt_array($ch, array(
-            $options
-        ));
+    	$required_params = array();
+		array_push($required_params, 'Client-Id: '. $this->_client_id);
+		array_push($required_params,'Accept: application/vnd.twitchtv.v'. $this->_api_version .'+json');
+		if(isset($this->_access_token)) {
+			array_push($required_params, 'Authorization: OAuth ' . $this->get_access_token());
+		}
+    	if(isset($options[CURLOPT_HEADER])) {
+			$options[CURLOPT_HEADER] = array_push($required_params, $options[CURLOPT_HEADER]);
+		} else {
+			$options[CURLOPT_HTTPHEADER] = $required_params;
+		}
+
+		$ch = curl_init($url);
+        curl_setopt_array($ch, $options);
         $response = curl_exec($ch);
         curl_close($ch);
-
         if(!$response) {
             die('Error: "' . curl_error($ch) . '" - Code: "' . curl_errno($ch));
         } else {
             return json_decode($response);
         }
     }
+
+    protected function debug($object) {
+    	echo "<pre>" .print_r($object,true) . "</pre>";
+	}
 
 
 

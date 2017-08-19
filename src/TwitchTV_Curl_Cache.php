@@ -1,5 +1,5 @@
 <?php
-namespace TwitchTV\TwitchTV_Curl_Cache;
+namespace Twitch\TwitchTV_Curl_Cache;
 
 /**
  * Class TwitchTV_Curl_Cache
