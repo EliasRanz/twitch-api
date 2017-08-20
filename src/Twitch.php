@@ -104,7 +104,7 @@ class Twitch {
      * Gets the access token used for all API requests
      * @return string
      */
-    private function get_access_token() {
+    public function get_access_token() {
         return $this->_access_token;
     }
 
@@ -113,10 +113,14 @@ class Twitch {
      * This is REQUIRED for many of the functions.
      * @param $code string      :This is the code that Twitch passes onto the $_redirect_url. This would often be pulled via a $_GET['code'] request.
      */
-    public function set_access_token($code) {
-        $response = $this->run_curl($this->_kraken_url."oauth2/token?client_id=" . $this->_client_id."&client_secret=".$this->_client_secret."&code=".$code."&grant_type=authorization_code&redirect_uri=".$this->_redirect_url,
-			array(CURLOPT_FOLLOWLOCATION => FALSE,CURLOPT_RETURNTRANSFER => TRUE,CURLOPT_POST => 1));
-        $this->_access_token = $response->access_token;
+    public function set_access_token($code, $access_token = null) {
+    	if($code !== null){
+			$response = $this->run_curl($this->_kraken_url."oauth2/token?client_id=" . $this->_client_id."&client_secret=".$this->_client_secret."&code=".$code."&grant_type=authorization_code&redirect_uri=".$this->_redirect_url,
+				array(CURLOPT_FOLLOWLOCATION => FALSE,CURLOPT_RETURNTRANSFER => TRUE,CURLOPT_POST => 1));
+			$this->_access_token = $response->access_token;
+		} else {
+    		$this->_access_token = $access_token;
+		}
     }
 
     /**
@@ -221,6 +225,35 @@ class Twitch {
 		}
 	}
 
+	/**
+	 * Gets the most recent Twitch clips ordered by date
+	 * @param mixed $username
+	 * @return mixed
+	 */
+	public function get_recent_clips($option, $username = null) {
+		if($username !== null) {
+			$result = $this->run_curl($this->_kraken_url . "clips/top?channel=" . $username, array(CURLOPT_RETURNTRANSFER => 1));
+		} else {
+			$result = $this->run_curl($this->_kraken_url . "clips?channel=" . $this->_username, array(CURLOPT_RETURNTRANSFER => 1));
+		}
+
+		usort($result->clips, function($item1, $item2) {
+			$ts1 = strtotime($item1->created_at);
+			$ts2 = strtotime($item2->created_at);
+			return $ts2 - $ts1;
+		});
+
+		$return = array();
+		switch($option) {
+			case 'last':
+				array_push($return, $result->clips[0]);
+				break;
+			default:
+				array_push($return, $result->clips);
+		}
+		return $return;
+	}
+
     /**
      * Runs a curl command and returns a json response.
      * @param $url      :The url to make the curl request on
@@ -250,11 +283,4 @@ class Twitch {
             return json_decode($response);
         }
     }
-
-    protected function debug($object) {
-    	echo "<pre>" .print_r($object,true) . "</pre>";
-	}
-
-
-
 }
